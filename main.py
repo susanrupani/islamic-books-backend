@@ -77,15 +77,17 @@ class Handler(BaseHTTPRequestHandler):
                 model=model,
                 input=question,
                 tools=[{"type": "file_search"}],
-                tool_resources={
-                    "file_search": {"vector_store_ids": [VECTOR_STORE_ID]}
+                resources={                     # <-- new API (replaces tool_resources)
+                    "file_search": {
+                        "vector_store_ids": [VECTOR_STORE_ID]
+                    }
                 },
             )
 
             # Preferred helper (new SDK)
             answer_text = getattr(response, "output_text", None)
 
-            # Fallback: manual extraction
+            # Fallback: manual extraction if output_text missing
             if not answer_text:
                 chunks = []
                 for item in getattr(response, "output", []) or []:
