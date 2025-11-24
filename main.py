@@ -51,19 +51,24 @@ class Handler(BaseHTTPRequestHandler):
         try:
             data = json.loads(raw_body)
         except json.JSONDecodeError:
-            self._set_headers(400)
-            self.wfile.write(json.dumps({"error": "Invalid JSON"}).encode())
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "answer": "",
+                "model_used": "",
+                "error": "Invalid JSON"
+            }).encode())
             return
 
         question = (data.get("question") or "").strip()
         if not question:
-            self._set_headers(400)
-            self.wfile.write(
-                json.dumps({"error": "No question provided"}).encode()
-            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "answer": "",
+                "model_used": "",
+                "error": "No question provided"
+            }).encode())
             return
 
-        # Optional model override; fall back to default
         model = (data.get("model") or "").strip() or DEFAULT_MODEL
 
         try:
@@ -80,38 +85,39 @@ class Handler(BaseHTTPRequestHandler):
             # Preferred helper (new SDK)
             answer_text = getattr(response, "output_text", None)
 
-            # Fallback: manual extraction if output_text missing
+            # Fallback: manual extraction
             if not answer_text:
                 chunks = []
                 for item in getattr(response, "output", []) or []:
                     for content in getattr(item, "content", []) or []:
                         if getattr(content, "type", "") == "output_text":
                             chunks.append(content.text.value)
-                answer_text = (
-                    "\n\n".join(chunks) if chunks else "No result returned."
-                )
+                answer_text = "\n\n".join(chunks) if chunks else ""
 
             self._set_headers(200)
-            self.wfile.write(
-                json.dumps(
-                    {
-                        "answer": answer_text,
-                        "model_used": model,
-                    }
-                ).encode()
-            )
+            self.wfile.write(json.dumps({
+                "answer": answer_text,
+                "model_used": model,
+                "error": ""
+            }).encode())
 
         except Exception as e:
-            # Log error for debugging
+            # Log error
             print("Error in /vector-search:", repr(e))
-            self._set_headers(500)
-            self.wfile.write(json.dumps({"error": str(e)}).encode())
+
+            # Always return 200 so GPT Actions do NOT fail
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "answer": "",
+                "model_used": model,
+                "error": str(e)
+            }).encode())
 
 
 # -------- Server Runner --------
 
 def run(server_class=HTTPServer, handler_class=Handler) -> None:
-    # Render sets PORT in the environment; default to 8000 for local dev
+    # Render sets PORT in env; default to 8000 for local dev
     port = int(os.environ.get("PORT", "8000"))
     server_address = ("0.0.0.0", port)
     httpd = server_class(server_address, handler_class)
